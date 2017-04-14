@@ -1,0 +1,170 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "jmeterVMName": {
+            "type": "string",
+            "minLength": 1
+        },
+        "jmeterVMAdminUserName": {
+            "type": "string",
+            "minLength": 1
+        },
+        "jmeterVMAdminPassword": {
+            "type": "securestring"
+        },
+        "jmeterVMUbuntuOSVersion": {
+            "type": "string",
+            "defaultValue": "14.04.2-LTS",
+            "allowedValues": [
+                "12.04.5-LTS",
+                "14.04.2-LTS",
+                "15.04"
+            ]
+        },
+        "Jmeter_vm_storageType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [
+                "Standard_LRS",
+                "Standard_ZRS",
+                "Standard_GRS",
+                "Standard_RAGRS",
+                "Premium_LRS"
+            ]
+        }
+    },
+    "resources": [
+        {
+            "name": "[variables('jmeterVMNicName')]",
+            "type": "Microsoft.Network/networkInterfaces",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', 'jmeter_vnet')]"
+            ],
+            "tags": {
+                "displayName": "jmeterVMNic"
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('jmeterVMSubnetRef')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[parameters('jmeterVMName')]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('Jmeter_vm_storageName'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', variables('jmeterVMNicName'))]"
+            ],
+            "tags": {
+                "displayName": "jmeterVM"
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[variables('jmeterVMVmSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('jmeterVMName')]",
+                    "adminUsername": "[parameters('jmeterVMAdminUsername')]",
+                    "adminPassword": "[parameters('jmeterVMAdminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('jmeterVMImagePublisher')]",
+                        "offer": "[variables('jmeterVMImageOffer')]",
+                        "sku": "[parameters('jmeterVMUbuntuOSVersion')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "jmeterVMOSDisk",
+                        "vhd": {
+                            "uri": "[concat('http://', variables('Jmeter_vm_storageName'), '.blob.core.windows.net/', variables('jmeterVMStorageAccountContainerName'), '/', variables('jmeterVMOSDiskName'), '.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('jmeterVMNicName'))]"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "[variables('Jmeter_vm_storageName')]",
+            "type": "Microsoft.Storage/storageAccounts",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "Jmeter_vm_storage"
+            },
+            "properties": {
+                "accountType": "[parameters('Jmeter_vm_storageType')]"
+            }
+        },
+        {
+            "name": "jmeter_vnet",
+            "type": "Microsoft.Network/virtualNetworks",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "jmeter_vnet"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('jmeter_vnetPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('jmeter_vnetSubnet1Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('jmeter_vnetSubnet1Prefix')]"
+                        }
+                    },
+                    {
+                        "name": "[variables('jmeter_vnetSubnet2Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('jmeter_vnetSubnet2Prefix')]"
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "variables": {
+        "jmeterVMImagePublisher": "Canonical",
+        "jmeterVMImageOffer": "UbuntuServer",
+        "jmeterVMOSDiskName": "jmeterVMOSDisk",
+        "jmeterVMVmSize": "Standard_D1",
+        "jmeterVMVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'jmeter_vnet')]",
+        "jmeterVMSubnetRef": "[concat(variables('jmeterVMVnetID'), '/subnets/', variables('jmeter_vnetSubnet1Name'))]",
+        "jmeterVMStorageAccountContainerName": "vhds",
+        "jmeterVMNicName": "[concat(parameters('jmeterVMName'), 'NetworkInterface')]",
+        "Jmeter_vm_storageName": "[concat('Jmeter_vm_storage', uniqueString(resourceGroup().id))]",
+        "jmeter_vnetPrefix": "10.0.0.0/16",
+        "jmeter_vnetSubnet1Name": "Subnet-1",
+        "jmeter_vnetSubnet1Prefix": "10.0.0.0/24",
+        "jmeter_vnetSubnet2Name": "Subnet-2",
+        "jmeter_vnetSubnet2Prefix": "10.0.1.0/24"
+    }
+}
